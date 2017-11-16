@@ -1,0 +1,5 @@
+<launch>
+    <node name="openni_tracker" pkg="openni_tracker" type="openni_tracker"/>
+    <node name="gesture_detection" pkg="gesture_tracker" type="gesture_detection.py"/>
+    <node name="rviz" pkg="rviz" type="rviz" args="-d $(find gesture_tracker)/config/skeleton.rviz" />
+</launch>
