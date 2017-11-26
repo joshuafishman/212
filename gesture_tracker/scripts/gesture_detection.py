@@ -52,7 +52,7 @@ def detect_segments(user,joints):
     global user_joints
     global user_movements
     global user_time
-    wave_threshold = 0.15
+    wave_threshold = 0.14
     
     get_prev_movement = lambda gtype: user_movements.setdefault(user,{}).setdefault(gtype,[None,None])
     getxyz = lambda t: np.array([t.x, t.y, t.z]) 
@@ -147,7 +147,7 @@ def detect_segments(user,joints):
             
 def detect_gestures():
     global user_segments
-    gesture_time_limit = 0.02 # max time elapsed between wave segments in order for them to count as part of a gesture
+    gesture_time_limit = 0.03 # max time elapsed between wave segments in order for them to count as part of a gesture
     gesture_count = 4 #segments in a gesture
     
     for user,joints in user_joints.items():
