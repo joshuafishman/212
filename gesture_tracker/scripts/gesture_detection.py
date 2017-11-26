@@ -34,66 +34,121 @@ user_movements = {} #{user: {gesture type:last detected movement}}
 user_time = {} #{user: last time printed}
 
 
+def line(p1,p2):
+    """
+    Get an array representing the parametric equation for a line from 2 points
+    If the parametric equation is {(x,y,z) = (px+n*tx,py+n*ty,pz+n*tz) for any n}, the array returned would be ([px,py,pz], [tx,ty,tz])
+    Inputs:
+        p1: set of x,y,z coordinates
+        p2: set of x,y,z coordinates
+    Outputs:
+        2x3 line array
+    """
+    p = np.array(p1)
+    t = np.array(p2) - np.array (p1)
+    return (p,t) 
+
 def detect_segments(user,joints):
     global user_joints
     global user_movements
     global user_time
     wave_threshold = 0.15
+    
+    get_prev_movement = lambda gtype: user_movements.setdefault(user,{}).setdefault(gtype,[None,None])
+    getxyz = lambda t: np.array([t.x, t.y, t.z]) 
+    
+    torsoxyz = getxyz(joints['torso'].translation)
         
     for side in ['right', 'left']:
         try:
             hand  = joints[side + '_hand']
             elbow = joints[side + '_elbow']
+            shoulder = joints[side + '_shoulder']
         except:
             print ('User {}, {} side not localized'.format(user,side))
             continue
             
         handpos, elbowpos = hand.translation, elbow.translation
+        shoulderxyz = getxyz(shoulder.translation)
+                        
+        vertical_direction = "Downward" if handpos.z < elbowpos.z else "Upward"
         
-        #if .01 < time.clock() - user_time.setdefault(user,time.clock()) < .1:
-            #print(user)
-            #print(side)
-            #print("hand:{}".format(handpos))
-            #print("elbow:{}".format(elbowpos))
-            #print()
-            #user_time[user] = time.clock()
-            ##del user_joints[user]
+        if .01 < time.clock() - user_time.setdefault(user,time.clock()) < .1:
+            print(user)
+            print(side)
+            print("hand:{}".format(handpos))
+            print("elbow:{}".format(elbowpos))
+            print()
+            user_time[user] = time.clock()            
         
         #detect waves
-        for plane in ['x','y']:
-            gtype = 'wave_'+side + plane #gesture type
+        
+        shoulder_line = line(torsoxyz[:2], shoulderxyz[:2]) #from center out
+        shoulder_vec  = shoulder_line[1]/np.linalg.norm(shoulder_line[1]) #unit vector
+        
+        armline = line(getxyz(elbowpos)[:2], getxyz(handpos)[:2]) #xy line from elbow to wrist
+        
+        
+        ### parallel ###
+        
+        armvec_parallel_mag = np.dot(armline[1], shoulder_vec)  #magnitude of arm vector parallel to the shoulder
+        
+        gtype = 'wave_'+side + '_parallel'
+        parallel_prev = get_prev_movement(gtype) #prev is the last movement associated with gesture gtype
+                                                 #initialized to [None, None]
+                                        
+        if armvec_parallel_mag > wave_threshold:
+            parallel_movement = ['Outward', vertical_direction]
+        
+        elif armvec_parallel_mag < -wave_threshold:
+            parallel_movement = ['Inward', vertical_direction]
+        
+        else:
+            parallel_movement = parallel_prev
             
-            prev = user_movements.setdefault(user,{}).setdefault(gtype,[None,None]) #prev is the last movement associated with gesture gtype, initialized to [.5, .5]
+        user_movements[user][gtype] = parallel_movement
+        
+        if parallel_prev[0] != parallel_movement[0] and parallel_prev[1] == parallel_movement[1]:
+            #normal wave
+            return parallel_movement[1] + " Parallel Wave"
+        
+        if parallel_prev[0] == parallel_movement[0] and parallel_prev[1] != parallel_movement[1]:
+            #sideways wave
+            return parallel_movement[0] + " Parallel Wave"
+            
 
+        #XY wave finding
+        #for plane in ['x','y']:
+            #gtype = 'wave_'+side + plane #gesture type
             
-            h_c = getattr(handpos, plane)  #hand coordinate in the x or y direction
-            e_c = getattr(elbowpos, plane) #elbow coordinate in the x or y direction
+            #prev = user_movements.setdefault(user,{}).setdefault(gtype,[None,None]) #prev is the last movement associated with gesture gtype, initialized to [None, None]
             
-            direction = handpos.z < elbowpos.z # True = down, False = up
-
+            #h_c = getattr(handpos, plane)  #hand coordinate in the x or y vertical_direction
+            #e_c = getattr(elbowpos, plane) #elbow coordinate in the x or y vertical_direction
             
-            if h_c > e_c + wave_threshold:
-                movement = [0,direction]
+            #if h_c > e_c + wave_threshold:
+                #movement = [0,vertical_direction]
                     
-            elif h_c < e_c - wave_threshold:
-                movement = [1, direction]
+            #elif h_c < e_c - wave_threshold:
+                #movement = [1, vertical_direction]
             
-            else:
-                movement = prev
+            #else:
+                #movement = prev
             
-            user_movements[user][gtype] = movement
+            #user_movements[user][gtype] = movement
             
-            if prev[0] != movement[0] and prev[1] == movement[1]:
-                if direction:
-                    return "Downward Wave"
+            #if prev[0] != movement[0] and prev[1] == movement[1]:
+                #if vertical_direction:
+                    #return "Downward Wave"
                     
-                else:
-                    return "Upward Wave"
+                #else:
+                    #return "Upward Wave"
                     
             
 def detect_gestures():
     global user_segments
-    wave_time_limit = 0.02 # max time elapsed between wave segments in order for them to count as part of a gesture
+    gesture_time_limit = 0.02 # max time elapsed between wave segments in order for them to count as part of a gesture
+    gesture_count = 4 #segments in a gesture
     
     for user,joints in user_joints.items():
           
@@ -105,25 +160,17 @@ def detect_gestures():
             t = time.clock()
             prev_seg, prev_time, prev_count = user_segments.setdefault(user,(None,0,0)) 
                    
-            if seg == prev_seg and t - prev_time < wave_time_limit:
+            if seg == prev_seg and t - prev_time < gesture_time_limit:
                 count = prev_count + 1
             
             else:
                 count = 1
-            if count >= 3:
+            if count >= gesture_count:
                 pub.publish(seg)
                 count = 0
             user_segments[user] = (seg,t, count)
             
                 
-                
-                    
-                    
-                
-                
-        
-                    
-    
 
 def tfCallback(msg):
     # this callback needs to be populated with code that 
