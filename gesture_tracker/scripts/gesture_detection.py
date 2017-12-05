@@ -69,9 +69,7 @@ def detect_segments(user,joints):
             
         handpos, elbowpos, shoulderpos = hand.translation, elbow.translation, shoulder.translation
         shoulderxyz, elbowxyz,handxyz = getxyz(shoulderpos), getxyz(elbowpos), getxyz(handpos)
-                        
-        vertical_direction = "Downward" if handpos.z < elbowpos.z else "Upward"
-        
+                   
         #if .01 < time.clock() - user_time.setdefault(user,time.clock()) < .1:
             #print(user)
             #print(side)
@@ -95,17 +93,17 @@ def detect_segments(user,joints):
         gtype = 'wave_'+side + '_parallel'
         parallel_prev = get_prev_movement(gtype, [None,None]) #prev is the last movement associated with gesture gtype
                                                               #initialized to [None, None]
-                                        
-        if armvec_parallel_mag > wave_threshold:
-            parallel_movement = ['Outward', vertical_direction]
         
-        elif armvec_parallel_mag < -wave_threshold:
-            parallel_movement = ['Inward', vertical_direction]
+        parallel_movement = parallel_prev
         
-        else:
-            parallel_movement = parallel_prev
-            
+        if abs(armvec_parallel_mag) > wave_threshold:
+            parallel_movement[0] = "Outward" if armvec_parallel_mag > 0 else "Inward"
+        
+        if abs(handxyz[2]-elbowxyz[2]) > wave_threshold:
+            parallel_movement[1]  = "Downward" if handpos.z < elbowpos.z else "Upward"
+
         user_movements[user][gtype] = parallel_movement
+        
         
         if parallel_prev[0] != parallel_movement[0] and parallel_prev[1] == parallel_movement[1]:
             #normal wave
