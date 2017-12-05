@@ -68,7 +68,7 @@ def detect_segments(user,joints):
             continue
             
         handpos, elbowpos = hand.translation, elbow.translation
-        shoulderxyz = getxyz(shoulder.translation)
+        shoulderxyz, elbowxyz,handxyz = getxyz(shoulder.translation),getxyz(elbowpos), getxyz(handpos)
                         
         vertical_direction = "Downward" if handpos.z < elbowpos.z else "Upward"
         
@@ -85,7 +85,7 @@ def detect_segments(user,joints):
         shoulder_line = line(torsoxyz[:2], shoulderxyz[:2]) #from center out
         shoulder_vec  = shoulder_line[1]/np.linalg.norm(shoulder_line[1]) #unit vector
         
-        armline = line(getxyz(elbowpos)[:2], getxyz(handpos)[:2]) #xy line from elbow to wrist
+        armline = line(elbowxyz[:2], handxyz[:2]) #xy line from elbow to wrist
         
         
         ### parallel ###
@@ -142,6 +142,19 @@ def detect_segments(user,joints):
                     
                 #else:
                     #return "Upward Wave"
+                    
+    ###Stationary gestures###
+    min_dist = 0
+    closed_pos = [0,0,0]
+    open_pos = [0,0,0]
+    gripper_pos = [0,0,0]
+    
+    if np.linalg.norm(handpos-closed_pos) < min_dist:
+        return "On Open Drawer"
+    if np.linalg.norm(handpos-open_pos) < min_dist:
+        return "On Closed Drawer"
+    if np.linalg.norm(handpos-gripper_pos) < min_dist:
+        return "On Gripper"
                     
             
 def detect_gestures():
