@@ -53,7 +53,7 @@ def detect_segments(user,joints):
     #global user_time
     wave_threshold = 0.1
     
-    get_prev_movement = lambda gtype: user_movements.setdefault(user,{}).setdefault(gtype,[None,None])
+    get_prev_movement = lambda gtype, default: user_movements.setdefault(user,{}).setdefault(gtype,default)
     getxyz = lambda t: np.array([t.x, t.y, t.z]) 
     
     torsoxyz = getxyz(joints['torso'].translation)
@@ -93,8 +93,8 @@ def detect_segments(user,joints):
         armvec_parallel_mag = np.dot(armline[1], shoulder_vec)  #magnitude of arm vector parallel to the shoulder
         
         gtype = 'wave_'+side + '_parallel'
-        parallel_prev = get_prev_movement(gtype) #prev is the last movement associated with gesture gtype
-                                                 #initialized to [None, None]
+        parallel_prev = get_prev_movement(gtype, [None,None]) #prev is the last movement associated with gesture gtype
+                                                              #initialized to [None, None]
                                         
         if armvec_parallel_mag > wave_threshold:
             parallel_movement = ['Outward', vertical_direction]
@@ -143,19 +143,26 @@ def detect_segments(user,joints):
                 #else:
                     #return "Upward Wave"
                     
-    ###Stationary gestures###
-    min_dist = 0
-    closed_pos = [0,0,0]
-    open_pos = [0,0,0]
-    gripper_pos = [0,0,0]
-    
-    if np.linalg.norm(handpos-closed_pos) < min_dist:
-        return "On Open Drawer"
-    if np.linalg.norm(handpos-open_pos) < min_dist:
-        return "On Closed Drawer"
-    if np.linalg.norm(handpos-gripper_pos) < min_dist:
-        return "On Gripper"
-                    
+        ###Stationary gestures###
+        min_dist = 0
+        closed_pos = [0,0,0]
+        open_pos = [0,0,0]
+        gripper_pos = [0,0,0]
+        
+        gtype = "stationary_"+side
+        prev = get_prev_movement(gtype,handxyz)
+        user_movements[user][gtype] = prev #don't change this so we can see if the hand moves
+        
+        if np.linalg.norm(prev-handxyz) < min_dist: #hand is basically stationary
+            
+            if np.linalg.norm(handpos-closed_pos) < min_dist:
+                return "On Open Drawer"
+            if np.linalg.norm(handpos-open_pos) < min_dist:
+                return "On Closed Drawer"
+            if np.linalg.norm(handpos-gripper_pos) < min_dist:
+                return "On Gripper"
+           
+        user_movements[user][gtype] = handxyz #if the hand is not in a designated location, reset prev
             
 def detect_gestures():
     global user_segments
