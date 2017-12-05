@@ -70,6 +70,8 @@ def detect_segments(user,joints):
         handpos, elbowpos, shoulderpos = hand.translation, elbow.translation, shoulder.translation
         shoulderxyz, elbowxyz,handxyz = getxyz(shoulderpos), getxyz(elbowpos), getxyz(handpos)
                    
+        vertical_direction = "Downward" if handpos.z < elbowpos.z else "Upward"
+        
         #if .01 < time.clock() - user_time.setdefault(user,time.clock()) < .1:
             #print(user)
             #print(side)
@@ -93,14 +95,16 @@ def detect_segments(user,joints):
         gtype = 'wave_'+side + '_parallel'
         parallel_prev = get_prev_movement(gtype, [None,None]) #prev is the last movement associated with gesture gtype
                                                               #initialized to [None, None]
+                                        
+        if armvec_parallel_mag > wave_threshold:
+            parallel_movement = ['Outward', vertical_direction]
         
-        parallel_movement = parallel_prev
+        elif armvec_parallel_mag < -wave_threshold:
+            parallel_movement = ['Inward', vertical_direction]
         
-        if abs(armvec_parallel_mag) > wave_threshold:
-            parallel_movement[0] = "Outward" if armvec_parallel_mag > 0 else "Inward"
-        
-        if abs(handxyz[2]-elbowxyz[2]) > wave_threshold:
-            parallel_movement[1]  = "Downward" if handpos.z < elbowpos.z else "Upward"
+        else:
+            parallel_movement = parallel_prev
+
 
         user_movements[user][gtype] = parallel_movement
         
@@ -142,10 +146,10 @@ def detect_segments(user,joints):
                     #return "Upward Wave"
                     
         ###Stationary gestures###
-        min_dist = 0
-        closed_pos = [0,0,0]
-        open_pos = [0,0,0]
-        gripper_pos = [0,0,0]
+        min_dist = .1
+        closed_pos  = [0.86,-0.26,-0.23]
+        open_pos    = [0,.4,-.35]
+        gripper_pos = [0,0,-.35]
         
         gtype = "stationary_"+side
         stationary_prev = get_prev_movement(gtype,handxyz)
@@ -153,11 +157,11 @@ def detect_segments(user,joints):
         
         if np.linalg.norm(stationary_prev-handxyz) < min_dist: #hand is basically stationary
             
-            if np.linalg.norm(handpos-closed_pos) < min_dist:
+            if np.linalg.norm(handxyz-closed_pos) < min_dist:
                 return "On Closed Drawer"
-            if np.linalg.norm(handpos-open_pos) < min_dist:
+            if np.linalg.norm(handxyz-open_pos) < min_dist:
                 return "On Open Drawer"
-            if np.linalg.norm(handpos-gripper_pos) < min_dist:
+            if np.linalg.norm(handxyz-gripper_pos) < min_dist:
                 return "On Gripper"
            
         user_movements[user][gtype] = handxyz #if the hand is not in a designated location, reset movement
@@ -181,12 +185,11 @@ def detect_gestures():
             
             dt =  t-prev_time
             
-            if dt < gesture_min_time:
-                continue       
-                   
             testpub.publish(str(dt)+' '+seg)       
                    
-            
+            if dt < gesture_min_time:
+                continue 
+                
             if seg == prev_seg and  dt < gesture_time_limit:
                 count = prev_count + 1
             
