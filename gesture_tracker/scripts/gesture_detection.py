@@ -28,10 +28,9 @@ from std_msgs.msg import Bool,String
 
 
 user_joints = {} #{id: {joint: transform}}
-count = 0
 user_segments = {} # {user: (last detected segment,timestamp,count)}
 user_movements = {} #{user: {gesture type:last detected movement}}
-user_time = {} #{user: last time printed}
+#user_time = {} #{user: last time printed}
 
 
 def line(p1,p2):
@@ -51,8 +50,8 @@ def line(p1,p2):
 def detect_segments(user,joints):
     global user_joints
     global user_movements
-    global user_time
-    wave_threshold = 0.14
+    #global user_time
+    wave_threshold = 0.1
     
     get_prev_movement = lambda gtype: user_movements.setdefault(user,{}).setdefault(gtype,[None,None])
     getxyz = lambda t: np.array([t.x, t.y, t.z]) 
@@ -73,13 +72,13 @@ def detect_segments(user,joints):
                         
         vertical_direction = "Downward" if handpos.z < elbowpos.z else "Upward"
         
-        if .01 < time.clock() - user_time.setdefault(user,time.clock()) < .1:
-            print(user)
-            print(side)
-            print("hand:{}".format(handpos))
-            print("elbow:{}".format(elbowpos))
-            print()
-            user_time[user] = time.clock()            
+        #if .01 < time.clock() - user_time.setdefault(user,time.clock()) < .1:
+            #print(user)
+            #print(side)
+            #print("hand:{}".format(handpos))
+            #print("elbow:{}".format(elbowpos))
+            #print()
+            #user_time[user] = time.clock()            
         
         #detect waves
         
@@ -147,8 +146,9 @@ def detect_segments(user,joints):
             
 def detect_gestures():
     global user_segments
-    gesture_time_limit = 0.03 # max time elapsed between wave segments in order for them to count as part of a gesture
-    gesture_count = 4 #segments in a gesture
+    gesture_min_time =   0.005
+    gesture_time_limit = 0.05 # max time elapsed between wave segments in order for them to count as part of a gesture
+    gesture_count = 3 #segments in a gesture
     
     for user,joints in user_joints.items():
           
@@ -156,18 +156,29 @@ def detect_gestures():
         
         if seg is not None:   
             
+            
             #update last detected gesture segment    
             t = time.clock()
             prev_seg, prev_time, prev_count = user_segments.setdefault(user,(None,0,0)) 
+            
+            dt =  t-prev_time
+            
+            if dt < gesture_min_time:
+                continue       
                    
-            if seg == prev_seg and t - prev_time < gesture_time_limit:
+            testpub.publish(str(dt)+' '+seg)       
+                   
+            
+            if seg == prev_seg and  dt < gesture_time_limit:
                 count = prev_count + 1
             
             else:
                 count = 1
+                
             if count >= gesture_count:
-                pub.publish(seg)
+                pub.publish(str(t)+' '+seg)
                 count = 0
+                
             user_segments[user] = (seg,t, count)
             
                 
@@ -175,7 +186,6 @@ def detect_gestures():
 def tfCallback(msg):
     # this callback needs to be populated with code that 
     # detects a specific gesture and publishes True when the gesture is detected
-    global count
     global user_joints
     
     Transform = msg.transforms[0]
@@ -185,16 +195,11 @@ def tfCallback(msg):
     
     detect_gestures()
     
-    if count == 200:
-        startpub.publish(True)
-        print("published True")
-    count += 1 
+
     
-startpub = rospy.Publisher('start_gesture_detected', Bool, queue_size=10)
+testpub = rospy.Publisher('segments', String, queue_size=10)
 pub = rospy.Publisher('gestures_detected', String, queue_size=10)
 
 rospy.init_node('gesture_detection', anonymous=True)
-startpub.publish(False)
-print("published False")
 rospy.Subscriber('/tf', TFMessage, tfCallback)
 rospy.spin()
